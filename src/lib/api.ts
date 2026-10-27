@@ -3,7 +3,7 @@ import axios, { AxiosError } from 'axios'
 export const TOKEN_KEY = 'munot_token'
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'https://dr-backend-igqh.onrender.com/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'https://drmunot-api.duckdns.org/api',
   timeout: 20000,
 })
 
