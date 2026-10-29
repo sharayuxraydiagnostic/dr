@@ -24,7 +24,7 @@ export function Hero3D() {
         <img
           src="/images/orthopaedic-running-logo.jpeg"
           alt="Running figure representing orthopaedic and joint health"
-          className="max-h-80 w-full object-contain drop-shadow-xl"
+          className="max-h-100 w-full object-contain drop-shadow-xl"
         />
       </motion.div>
 
