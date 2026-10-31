@@ -116,15 +116,15 @@ describe('Edit completed prescription', () => {
     expect(await screen.findByText('Keep at least one diagnosis.')).toBeInTheDocument()
     expect(apiMock.put).not.toHaveBeenCalled()
   })
-  it('follow-up stays read-only while editing', async () => {
+  it('the scheduled follow-up appointment message is kept exactly while editing', async () => {
     renderConsult()
     await userEvent.click(await screen.findByRole('button', { name: /Edit prescription/ }))
-    expect(screen.getByRole('radio', { name: '7 days' })).toBeDisabled()
-    expect(screen.getByText(/Follow-up already arranged/)).toBeInTheDocument()
+    expect(screen.getByText(/Follow-up already arranged for/)).toHaveTextContent('Follow-up already arranged for 06 Nov 2026')
+    expect(screen.getByText(/It is not changed by editing the prescription; reschedule it from the appointment if needed\./)).toBeInTheDocument()
   })
 })
 
-const rx = { id: 4, code: 'RX4', consultationId: 9, patientId: 5, patientName: 'Asha Patil', doctorName: 'Dr Munot', date: '2026-10-30', items: [{ medicineName: 'Paracetamol', dosage: '1 tab', frequency: 'Twice daily', duration: '5 days' }], diagnoses: ['Knee OA'], patientCode: 'PAT-5', doctorRegistrationNumber: 'R1' }
+const rx = { symptoms: 'Knee pain for 2 weeks', examinationNotes: 'Mild swelling', id: 4, code: 'RX4', consultationId: 9, patientId: 5, patientName: 'Asha Patil', doctorName: 'Dr Munot', date: '2026-10-30', items: [{ medicineName: 'Paracetamol', dosage: '1 tab', frequency: 'Twice daily', duration: '5 days' }], diagnoses: ['Knee OA'], patientCode: 'PAT-5', doctorRegistrationNumber: 'R1' }
 const renderRx = () => render(<Providers route="/print/prescription/4"><Routes><Route path="/print/prescription/:id" element={<PrescriptionPrint />} /></Routes></Providers>)
 
 describe('Prescription print', () => {
@@ -135,6 +135,8 @@ describe('Prescription print', () => {
     expect(screen.getByTestId('rx-spacer-top').style.height).toBe('55mm'); expect(screen.getByTestId('rx-spacer-bottom').style.height).toBe('30mm')
     expect(screen.queryByText('CLINIC-HEADER-TEXT')).toBeNull()
     expect(screen.getByText('Paracetamol')).toBeInTheDocument()
+    expect(screen.getByTestId('rx-clinical-notes')).toHaveTextContent('Knee pain for 2 weeks')
+    expect(screen.getByTestId('rx-clinical-notes')).toHaveTextContent('Mild swelling')
     expect(document.head.querySelector('[data-munot-page-style]')?.textContent).toMatch(/@page\s*{\s*size:\s*A4 portrait;\s*margin:\s*0/)
     await userEvent.click(screen.getByRole('checkbox'))
     expect(screen.getByText('CLINIC-HEADER-TEXT')).toBeInTheDocument(); expect(screen.queryByTestId('rx-print-sheet')).toBeNull()
@@ -145,5 +147,36 @@ describe('Prescription print', () => {
     expect(await screen.findByText('CLINIC-HEADER-TEXT')).toBeInTheDocument()
     expect(screen.queryByTestId('rx-print-sheet')).toBeNull()
     expect(apiMock.get.mock.calls.some((c) => String(c[0]).includes('print-settings'))).toBe(false)
+  })
+})
+
+import { ReceptionHome, ReceptionPatients } from '../pages/reception/ReceptionPages'
+
+describe('Doctor uses the reception screens', () => {
+  beforeEach(() => {
+    reset()
+    apiMock.get.mockImplementation((u: string) => ok(u === '/patients/recent' ? [{ id: 5, patientCode: 'PAT-5', fullName: 'Asha Patil', phone: '1', hasPortalAccount: false, createdAt: '2026-10-30T10:00:00' }] : u === '/appointments' ? [appt({ id: 3, status: 'COMPLETED' })] : []))
+  })
+  it('as a doctor, links stay inside /doctor (not /reception, which a doctor cannot open)', async () => {
+    render(<Providers><ReceptionHome /></Providers>)
+    expect(await screen.findByText('Asha Patil')).toBeInTheDocument()
+    const hrefs = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '')
+    expect(hrefs.some((h) => h.startsWith('/doctor/appointments/new'))).toBe(true)
+    expect(hrefs.some((h) => h.startsWith('/doctor/billing?patientId=5'))).toBe(true)
+    expect(hrefs.some((h) => h.startsWith('/reception'))).toBe(false)
+  })
+  it('patients page links to the doctor routes too', async () => {
+    render(<Providers><ReceptionPatients /></Providers>)
+    expect(await screen.findByText('Asha Patil')).toBeInTheDocument()
+    const hrefs = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '')
+    expect(hrefs).toContain('/doctor/appointments/new?patientId=5')
+    expect(hrefs).toContain('/doctor/documents?patientId=5')
+  })
+  it('as reception, links are unchanged', async () => {
+    role = 'RECEPTIONIST'
+    render(<Providers><ReceptionPatients /></Providers>)
+    expect(await screen.findByText('Asha Patil')).toBeInTheDocument()
+    const hrefs = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '')
+    expect(hrefs).toContain('/reception/appointments/new?patientId=5')
   })
 })

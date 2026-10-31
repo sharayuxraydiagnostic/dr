@@ -7,6 +7,7 @@ import { api, errMsg } from '../lib/api'
 import { useDebounced, useLoad } from '../lib/hooks'
 import type { PatientView } from '../lib/types'
 import { clean } from '../lib/utils'
+import { ageFromDob, dobFromAge, parseAge } from '../lib/age'
 import { Button, Empty, Field, Input, Select, Spinner, Textarea } from './ui'
 
 export function PatientPicker({ value, onChange, placeholder = 'Search by name, phone, patient ID or appointment ID' }: { value: PatientView | null; onChange: (p: PatientView | null) => void; placeholder?: string }) {
@@ -39,7 +40,7 @@ const schema = z.object({
   fullName: z.string().min(2, 'Enter the full name').max(120),
   phone: z.string().regex(/^[+0-9 -]{10,15}$/, 'Enter a valid phone number'),
   email: z.string().email('Enter a valid email').or(z.literal('')),
-  dateOfBirth: z.string().optional(),
+  age: z.string().superRefine((v, ctx) => { const r = parseAge(v); if (r.error) ctx.addIssue({ code: 'custom', message: r.error }) }),
   gender: z.string().optional(),
   bloodGroup: z.string().optional(),
   address: z.string().max(300).optional(),
@@ -50,16 +51,23 @@ type FormData = z.infer<typeof schema>
 
 export function PatientForm({ initial, onSaved, onCancel }: { initial?: PatientView; onSaved: (p: PatientView) => void; onCancel: () => void }) {
   const [error, setError] = useState('')
+  const initialAge = ageFromDob(initial?.dateOfBirth)
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { fullName: initial?.fullName ?? '', phone: initial?.phone ?? '', email: initial?.email ?? '', dateOfBirth: initial?.dateOfBirth ?? '', gender: initial?.gender ?? '',
+    defaultValues: { fullName: initial?.fullName ?? '', phone: initial?.phone ?? '', email: initial?.email ?? '', age: initialAge === null ? '' : String(initialAge), gender: initial?.gender ?? '',
       bloodGroup: initial?.bloodGroup ?? '', address: initial?.address ?? '', emergencyContactName: initial?.emergencyContactName ?? '', emergencyContactPhone: initial?.emergencyContactPhone ?? '' },
   })
   return (
     <form noValidate className="space-y-4" onSubmit={handleSubmit(async (v) => {
       setError('')
       try {
-        const body = clean(v)
+        // Age is what the receptionist enters. The stored date is only (re)written when the age actually changed, so editing other
+        // details never alters an existing record's date.
+        const age = Number(v.age)
+        const dateOfBirth = initial?.dateOfBirth && initialAge === age ? initial.dateOfBirth : dobFromAge(age)
+        const { age: _age, ...rest } = v
+        void _age
+        const body = clean({ ...rest, dateOfBirth })
         const r = initial ? await api.put<PatientView>(`/patients/${initial.id}`, body) : await api.post<PatientView>('/patients', body)
         onSaved(r.data)
       } catch (e) { setError(errMsg(e)) }
@@ -69,7 +77,7 @@ export function PatientForm({ initial, onSaved, onCancel }: { initial?: PatientV
         <Field label="Full name *" error={errors.fullName?.message}><Input invalid={!!errors.fullName} {...register('fullName')} /></Field>
         <Field label="Mobile number *" error={errors.phone?.message}><Input type="tel" invalid={!!errors.phone} {...register('phone')} /></Field>
         <Field label="Email" error={errors.email?.message}><Input type="email" invalid={!!errors.email} {...register('email')} /></Field>
-        <Field label="Date of birth"><Input type="date" {...register('dateOfBirth')} /></Field>
+        <Field label="Age (Years) *" error={errors.age?.message}><Input inputMode="numeric" autoComplete="off" maxLength={3} placeholder="e.g. 25" invalid={!!errors.age} {...register('age')} /></Field>
         <Field label="Gender"><Select {...register('gender')}><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></Select></Field>
         <Field label="Blood group"><Select {...register('bloodGroup')}><option value="">Unknown</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((b) => <option key={b}>{b}</option>)}</Select></Field>
         <Field label="Emergency contact name"><Input {...register('emergencyContactName')} /></Field>

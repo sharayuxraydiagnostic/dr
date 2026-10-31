@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CalendarRange, FileText, History } from 'lucide-react'
 import { api, errMsg } from '../lib/api'
 import type { AppointmentView } from '../lib/types'
+import { istToday, shiftISO } from '../lib/istDate'
 import { fmtDate, fmtTime } from '../lib/utils'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Spinner, StatusBadge } from './ui'
 
@@ -15,13 +16,7 @@ export const RANGES: { id: RangeKey; label: string }[] = [
   { id: 'LAST_15', label: 'Last 15 days' }, { id: 'LAST_18', label: 'Last 18 days' }, { id: 'THIS_WEEK', label: 'This week' }, { id: 'LAST_WEEK', label: 'Last week' }, { id: 'CUSTOM', label: 'Custom range' },
 ]
 
-/** Today's date in India, whatever timezone the computer is set to. */
-export const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-
-export function shiftISO(iso: string, days: number) {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
-}
+export { istToday, shiftISO }
 
 const mondayOf = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number)

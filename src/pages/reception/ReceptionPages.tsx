@@ -7,12 +7,21 @@ import type { AppointmentView, BillCategory, BillView, DoctorView, PatientView, 
 import { addDaysISO, fmtDate, fmtDateTime, fmtTime, labelize, money, todayISO } from '../../lib/utils'
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Field, Input, Modal, PageHeader, PageLoader, Select, Stat, StatusBadge, Textarea, useUI } from '../../components/ui'
 import { PatientForm, PatientPicker } from '../../components/PatientParts'
+import { useOptionalAuth } from '../../context/AuthContext'
+import { formatAge } from '../../lib/age'
 import { PendingRequests } from '../../components/PendingRequests'
 import { BillModal } from '../../components/BillModal'
 import { SlotPicker, useDoctors } from '../../components/Booking'
 
 /* ---------- Today's appointments ---------- */
+/** These pages are shared: a doctor who also does front-desk work opens them under /doctor, reception under /reception. */
+function useBase() {
+  const doctor = useOptionalAuth()?.user?.role === 'DOCTOR'
+  return { base: doctor ? '/doctor' : '/reception', home: doctor ? '/doctor/desk' : '/reception' }
+}
+
 export function ReceptionHome() {
+  const { base } = useBase()
   const [date, setDate] = useState(todayISO())
   const [doctorId, setDoctorId] = useState('')
   const docs = useDoctors('/staff/doctors')
@@ -24,7 +33,7 @@ export function ReceptionHome() {
   const waiting = (queue.data ?? []).filter((q) => q.status === 'WAITING').length
   return (
     <>
-      <PageHeader title="Reception desk" subtitle="Appointments, check-in and live queue" action={<Link to="/reception/appointments/new"><Button><CalendarPlus className="h-4 w-4" /> New appointment</Button></Link>} />
+      <PageHeader title="Reception desk" subtitle="Appointments, check-in and live queue" action={<Link to={`${base}/appointments/new`}><Button><CalendarPlus className="h-4 w-4" /> New appointment</Button></Link>} />
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
         <Stat label="Appointments" value={list.length} icon={<ClipboardCheck />} />
         <Stat label="Waiting now" value={waiting} icon={<Users />} tone="amber" />
@@ -49,7 +58,7 @@ export function ReceptionHome() {
                     {a.status === 'BOOKED' && <Button size="sm" variant="outline" onClick={() => act('Appointment confirmed - patient notified', () => api.put(`/appointments/${a.id}/confirm`))}>Confirm</Button>}
                     {open && <Button size="sm" variant="ghost" onClick={async () => { if (await confirm({ title: 'Mark no-show?', message: `Mark ${a.patientName} as a no-show?`, confirmLabel: 'Mark no-show' })) act('Marked as no-show', () => api.put(`/appointments/${a.id}/no-show`)) }}>No-show</Button>}
                     {open && <Button size="sm" variant="ghost" className="text-red-600" onClick={async () => { if (await confirm({ title: 'Cancel appointment?', message: `Cancel ${a.patientName}'s appointment at ${fmtTime(a.startTime)}?`, confirmLabel: 'Cancel appointment', danger: true })) act('Appointment cancelled', () => api.put(`/appointments/${a.id}/cancel`, { reason: 'Cancelled by reception' })) }}>Cancel</Button>}
-                    {a.status === 'COMPLETED' && <Link to={`/reception/billing?patientId=${a.patientId}&appointmentId=${a.id}`}><Button size="sm" variant="outline"><Receipt className="h-4 w-4" /> Bill</Button></Link>}
+                    {a.status === 'COMPLETED' && <Link to={`${base}/billing?patientId=${a.patientId}&appointmentId=${a.id}`}><Button size="sm" variant="outline"><Receipt className="h-4 w-4" /> Bill</Button></Link>}
                   </div></td></tr>)})}</tbody></table></div>}
       </Card>
     </>
@@ -58,6 +67,7 @@ export function ReceptionHome() {
 
 /* ---------- Patients ---------- */
 export function ReceptionPatients() {
+  const { base } = useBase()
   const [q, setQ] = useState('')
   const [found, setFound] = useState<PatientView[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -78,11 +88,11 @@ export function ReceptionPatients() {
         <Button type="submit" loading={busy}>Search</Button></form></Card>
       <Card><CardHeader title={found ? `Search results (${rows.length})` : 'Recently registered'} />
         {recent.loading && !found ? <PageLoader /> : rows.length === 0 ? <Empty title="No patients found" icon={<Users />} /> :
-          <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-100"><thead><tr><th className="th">Patient ID</th><th className="th">Name</th><th className="th">Phone</th><th className="th">DOB</th><th className="th">Portal</th><th className="th" /></tr></thead>
+          <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-100"><thead><tr><th className="th">Patient ID</th><th className="th">Name</th><th className="th">Phone</th><th className="th">Age</th><th className="th">Portal</th><th className="th" /></tr></thead>
             <tbody className="divide-y divide-slate-100">{rows.map((p) => (
-              <tr key={p.id}><td className="td font-medium">{p.patientCode}</td><td className="td">{p.fullName}</td><td className="td">{p.phone}</td><td className="td">{fmtDate(p.dateOfBirth)}</td><td className="td">{p.hasPortalAccount ? <Badge tone="green">Active</Badge> : <Badge>None</Badge>}</td>
-                <td className="td"><div className="flex justify-end gap-1.5"><Link to={`/reception/appointments/new?patientId=${p.id}`}><Button size="sm" variant="outline"><CalendarPlus className="h-4 w-4" /></Button></Link>
-                  <Link to={`/reception/documents?patientId=${p.id}`}><Button size="sm" variant="outline"><FilePlus2 className="h-4 w-4" /></Button></Link>
+              <tr key={p.id}><td className="td font-medium">{p.patientCode}</td><td className="td">{p.fullName}</td><td className="td">{p.phone}</td><td className="td">{formatAge(p.dateOfBirth) || '-'}</td><td className="td">{p.hasPortalAccount ? <Badge tone="green">Active</Badge> : <Badge>None</Badge>}</td>
+                <td className="td"><div className="flex justify-end gap-1.5"><Link to={`${base}/appointments/new?patientId=${p.id}`}><Button size="sm" variant="outline"><CalendarPlus className="h-4 w-4" /></Button></Link>
+                  <Link to={`${base}/documents?patientId=${p.id}`}><Button size="sm" variant="outline"><FilePlus2 className="h-4 w-4" /></Button></Link>
                   <Button size="sm" variant="outline" onClick={() => setEdit(p)} aria-label="Edit"><Pencil className="h-4 w-4" /></Button></div></td></tr>))}</tbody></table></div>}
       </Card>
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit === 'new' ? 'Register new patient' : 'Edit patient'} wide>
@@ -96,6 +106,7 @@ export function ReceptionPatients() {
 export function NewAppointment() {
   const [sp] = useSearchParams()
   const nav = useNavigate()
+  const { home } = useBase()
   const { toast } = useUI()
   const docs = useDoctors('/staff/doctors')
   const [patient, setPatient] = useState<PatientView | null>(null)
@@ -115,7 +126,7 @@ export function NewAppointment() {
     try {
       const { data } = await api.post<AppointmentView>('/appointments', { patientId: patient!.id, doctorId: doc, date, startTime: time, reason: reason || undefined, type })
       if (checkIn) { const q = await api.post<QueueView>(`/appointments/${data.id}/check-in`); toast.success(`Booked and checked in. Token #${q.data.token}`) } else toast.success(`Appointment ${data.code} booked`)
-      nav('/reception')
+      nav(home)
     } catch (e) { toast.error(errMsg(e)); setTime('') } finally { setBusy(false) }
   }
   return (
